@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")/scripts"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Step 1 Dry Run - helm-apps Preview${NC}"
@@ -206,7 +207,7 @@ echo -e "${BLUE}  Running Dry Run Analysis${NC}"
 echo -e "${BLUE}========================================${NC}\n"
 
 # Run the step1 script in dry-run mode
-python3 "$SCRIPT_DIR/step1_helm_apps.py" \
+python3 "$SCRIPTS_DIR/step1_helm_apps.py" \
     --topic "$TOPIC" \
     --file "$VALUES_FILE" \
     --value-type "$VALUE_TYPE" \
@@ -234,7 +235,7 @@ echo -e ""
 echo -e "3. Or run locally (not recommended):"
 echo -e "   ${YELLOW}# Clone helm-apps repo${NC}"
 echo -e "   ${YELLOW}cd path/to/helm-apps${NC}"
-echo -e "   ${YELLOW}python3 $(basename $SCRIPT_DIR)/step1_helm_apps.py \\${NC}"
+echo -e "   ${YELLOW}python3 $(dirname "$SCRIPT_DIR")/scripts/step1_helm_apps.py \\${NC}"
 echo -e "   ${YELLOW}  --topic \"$TOPIC\" \\${NC}"
 echo -e "   ${YELLOW}  --file helm/kafka-connect-operator/values.yaml \\${NC}"
 echo -e "   ${YELLOW}  --value-type \"$VALUE_TYPE\" \\${NC}"

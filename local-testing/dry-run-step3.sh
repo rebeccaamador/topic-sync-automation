@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")/scripts"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Step 3 Dry Run - dbt Preview${NC}"
@@ -64,6 +65,15 @@ if [ -z "$2" ]; then
     fi
 else
     SINK_TYPE="$2"
+fi
+
+# Normalize SINK_TYPE (trim whitespace and convert to lowercase)
+SINK_TYPE=$(echo "$SINK_TYPE" | tr '[:upper:]' '[:lower:]' | xargs)
+
+# Validate SINK_TYPE
+if [ "$SINK_TYPE" != "s3" ] && [ "$SINK_TYPE" != "realtime" ]; then
+    echo -e "${RED}❌ Error: Invalid sink type '$SINK_TYPE'. Must be 's3' or 'realtime'${NC}"
+    exit 1
 fi
 
 echo -e "\n${BLUE}Configuration:${NC}"
@@ -164,20 +174,33 @@ echo -e "\n${BLUE}========================================${NC}"
 echo -e "${BLUE}  Running Dry Run Analysis${NC}"
 echo -e "${BLUE}========================================${NC}\n"
 
+# Ensure we only run one workflow based on sink type
+# Explicitly validate SINK_TYPE one more time
+if [ -z "$SINK_TYPE" ]; then
+    echo -e "${RED}❌ Error: SINK_TYPE is not set${NC}"
+    exit 1
+fi
+
+# Normalize again to be absolutely sure
+SINK_TYPE=$(echo "$SINK_TYPE" | tr '[:upper:]' '[:lower:]' | xargs)
+
 if [ "$SINK_TYPE" = "s3" ]; then
     # S3 workflow - Bootstrap external sources
+    echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  EXECUTING S3 SINK WORKFLOW ONLY${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}S3 Sink Workflow - Bootstrap External Sources${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
     
-    BOOTSTRAP_SCRIPT="$DBT_DIR/scripts/step3_dbt_s3_sink.py"
+    BOOTSTRAP_SCRIPT="$SCRIPTS_DIR/step3_dbt_s3_sink.py"
     
     if [ ! -f "$BOOTSTRAP_SCRIPT" ]; then
         echo -e "${RED}❌ Error: Bootstrap script not found at $BOOTSTRAP_SCRIPT${NC}"
         exit 1
     fi
     
-    echo -e "${BLUE}Current bootstrap script location:${NC}"
-    echo -e "  $(echo "$BOOTSTRAP_SCRIPT" | sed "s|$DBT_DIR/||")"
+    echo -e "${BLUE}Bootstrap script location:${NC}"
+    echo -e "  $BOOTSTRAP_SCRIPT"
     echo ""
     
     # Determine value type (default to json for dry-run)
@@ -195,36 +218,25 @@ if [ "$SINK_TYPE" = "s3" ]; then
     TEMP_OUTPUT="$TEMP_DIR/preview"
     mkdir -p "$TEMP_OUTPUT"
     
-    # Copy the bootstrap script to temp and run it there
-    cp -r "$DBT_DIR/scripts" "$TEMP_OUTPUT/"
-    cp -r "$DBT_DIR/models" "$TEMP_OUTPUT/" 2>/dev/null || mkdir -p "$TEMP_OUTPUT/models/staging/kafka/external"
+    # Copy dbt models directory structure and the bootstrap script
+    mkdir -p "$TEMP_OUTPUT/models/staging/kafka/external"
+    cp -r "$DBT_DIR/models" "$TEMP_OUTPUT/" 2>/dev/null || true
+    cp "$BOOTSTRAP_SCRIPT" "$TEMP_OUTPUT/step3_dbt_s3_sink.py"
     
     cd "$TEMP_OUTPUT"
     
-    if python3 scripts/step3_dbt_s3_sink.py --topic "$TOPIC" --value-type "$VALUE_TYPE" 2>&1; then
-        echo -e "\n${GREEN}✅ Bootstrap would succeed${NC}"
-        echo -e "${BLUE}ℹ️  Files that would be generated:${NC}"
-        
-        # Show what files were created
-        if [ -f "models/staging/kafka/_kafka_external__sources.yml" ]; then
-            echo -e "  ${GREEN}✓${NC} External source definition in _kafka_external__sources.yml"
-        fi
-        
-        TABLE_NAME=$(echo "$TOPIC" | sed 's/\./__/g' | sed 's/-/_/g')
-        if [ -f "models/staging/kafka/external/stg_kafka__${TABLE_NAME}__external.sql" ]; then
-            echo -e "  ${GREEN}✓${NC} Base model: stg_kafka__${TABLE_NAME}__external.sql"
-        fi
-        
-        if [ -f "models/staging/kafka/stg_kafka__${TABLE_NAME}.sql" ]; then
-            echo -e "  ${GREEN}✓${NC} Typecast model: stg_kafka__${TABLE_NAME}.sql"
-        fi
-    else
-        echo -e "\n${YELLOW}⚠️  Bootstrap script encountered an issue${NC}"
-        echo -e "${BLUE}ℹ️  This might mean the topic already exists or there's a configuration issue${NC}"
-    fi
+    # Run the S3 bootstrap script in dry-run mode
+    # The script will output what it would do without creating files
+    python3 step3_dbt_s3_sink.py --topic "$TOPIC" --value-type "$VALUE_TYPE" --dry-run
     
-else
+    # Explicitly exit the S3 workflow block - don't continue to realtime
+    # (This is already handled by the if/else, but being explicit)
+    
+elif [ "$SINK_TYPE" = "realtime" ]; then
     # Realtime workflow - Run step3_dbt.py
+    echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  EXECUTING REALTIME SINK WORKFLOW ONLY${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}Realtime Sink Workflow - dbt Extraction Models${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
     
@@ -256,12 +268,17 @@ else
     echo ""
     
     # Run the step3 script in dry-run mode
-    python3 "$SCRIPT_DIR/step3_dbt.py" \
+    python3 "$SCRIPTS_DIR/step3_dbt_realtime_sink.py" \
         --topic "$TOPIC" \
         --sources-file "$SOURCES_FILE" \
         --models-dir "$MODELS_DIR" \
         $AUTO_DISCOVER \
         --dry-run
+    
+else
+    # Should never reach here due to validation, but just in case
+    echo -e "${RED}❌ Error: Invalid SINK_TYPE '$SINK_TYPE'. Must be 's3' or 'realtime'${NC}"
+    exit 1
 fi
 
 # ============================================
@@ -293,7 +310,7 @@ if [ "$SINK_TYPE" = "s3" ]; then
     echo -e "   ${YELLOW}# Edit scripts/step3_dbt_s3_sink.py to add topic${NC}"
     echo -e "   ${YELLOW}python3 scripts/step3_dbt_s3_sink.py${NC}"
 else
-    echo -e "   ${YELLOW}python3 ../scripts/step3_dbt.py \\${NC}"
+    echo -e "   ${YELLOW}python3 $(dirname "$SCRIPT_DIR")/scripts/step3_dbt_realtime_sink.py \\${NC}"
     echo -e "   ${YELLOW}  --topic \"$TOPIC\" \\${NC}"
     echo -e "   ${YELLOW}  --sources-file models/.../sources.yml \\${NC}"
     echo -e "   ${YELLOW}  --models-dir models${NC}"

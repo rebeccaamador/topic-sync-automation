@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")/scripts"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Step 2 Dry Run - data-airflow Preview${NC}"
@@ -167,7 +168,7 @@ echo -e "${BLUE}  Running Dry Run Analysis${NC}"
 echo -e "${BLUE}========================================${NC}\n"
 
 # Run the step2 script in dry-run mode
-python3 "$SCRIPT_DIR/step2_data_airflow.py" \
+python3 "$SCRIPTS_DIR/step2_data_airflow.py" \
     --topic "$TOPIC" \
     --dag-file "$DAG_FILE" \
     --dry-run
