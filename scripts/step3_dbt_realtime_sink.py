@@ -22,9 +22,9 @@ def generate_table_name(topic):
 
 
 def generate_model_name(topic):
-    """Generate dbt model name from topic with stg_kafka__ prefix."""
-    # Convert topic directly to model name with stg_kafka__ prefix and __extracted suffix
-    model_name = 'stg_kafka__' + topic.replace('.', '__').replace('-', '_') + '__extracted'
+    """Generate dbt model name from topic (no prefix, but with __extracted suffix for realtime sink)."""
+    # Convert topic directly to model name (no stg_kafka__ prefix, but keep __extracted suffix)
+    model_name = topic.replace('.', '__').replace('-', '_') + '__extracted'
     return model_name
 
 
@@ -918,23 +918,26 @@ def main():
         args.dry_run
     )
     
-    # Create typecast model (aliases the raw model without stg_kafka__ prefix)
-    typecast_created, typecast_path, typecast_content = create_typecast_model_file(
-        models_dir,
-        model_name,
-        args.topic,
-        args.dry_run
-    )
+    # No typecast model for realtime sink - only one model is created
+    typecast_created = False
+    typecast_path = None
+    typecast_content = None
     
-    # Show exact file changes
-    if source_added or model_created or typecast_created:
+    # Show exact file changes (what WOULD be created in dry-run, or what WAS created)
+    if source_added or model_created:
         print("\n" + "="*70)
-        print("📝 EXACT FILE CHANGES")
+        if args.dry_run:
+            print("📝 EXACT FILE CHANGES (DRY RUN - These files would be created/modified)")
+        else:
+            print("📝 EXACT FILE CHANGES")
         print("="*70)
         
         # Show sources.yml diff
         if source_added and sources_original and sources_new:
-            print(f"\n1. {sources_file}")
+            if args.dry_run:
+                print(f"\n1. {sources_file} (WOULD MODIFY)")
+            else:
+                print(f"\n1. {sources_file}")
             print("-" * 70)
             
             original_lines = sources_original.splitlines(keepends=True)
@@ -965,16 +968,12 @@ def main():
         
         # Show new model file
         if model_created and model_path and model_content:
-            print(f"\n2. {model_path} (NEW FILE)")
+            if args.dry_run:
+                print(f"\n2. {model_path} (WOULD CREATE)")
+            else:
+                print(f"\n2. {model_path} (NEW FILE)")
             print("-" * 70)
             print(f"\033[32m{model_content}\033[0m")  # Green for new file
-            print("-" * 70)
-        
-        # Show typecast model file
-        if typecast_created and typecast_path and typecast_content:
-            print(f"\n3. {typecast_path} (NEW FILE)")
-            print("-" * 70)
-            print(f"\033[32m{typecast_content}\033[0m")  # Green for new file
             print("-" * 70)
         
         print("="*70)
@@ -982,33 +981,26 @@ def main():
     # Summary
     print("\n" + "="*70)
     
-    # Generate clean name for typecast model (without stg_kafka__ prefix)
-    typecast_name = model_name.replace('stg_kafka__', '', 1) if model_name.startswith('stg_kafka__') else model_name
-    
     if args.dry_run:
         print("🔍 DRY RUN COMPLETE - No changes written")
         print("="*70)
-        if source_added or model_created or typecast_created:
+        if source_added or model_created:
             print("\n✅ Would create:")
             if source_added:
                 print(f"   - Source entry in {sources_file}")
             if model_created:
-                print(f"   - Raw model file: models/staging/kafka_realtime/{model_name}.sql")
-            if typecast_created:
-                print(f"   - Typecast model file: models/staging/kafka_realtime/{typecast_name}.sql")
+                print(f"   - Model file: models/staging/kafka_realtime/{model_name}.sql")
         else:
             print("\nℹ️  No changes needed (files already exist)")
     else:
         print("✅ COMPLETE")
         print("="*70)
-        if source_added or model_created or typecast_created:
+        if source_added or model_created:
             print("\n✅ Created:")
             if source_added:
                 print(f"   - Source entry in {sources_file}")
             if model_created:
-                print(f"   - Raw model file: models/staging/kafka_realtime/{model_name}.sql")
-            if typecast_created:
-                print(f"   - Typecast model file: models/staging/kafka_realtime/{typecast_name}.sql")
+                print(f"   - Model file: models/staging/kafka_realtime/{model_name}.sql")
         else:
             print("\nℹ️  No changes needed (files already exist)")
 

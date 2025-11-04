@@ -95,6 +95,11 @@ def main():
         choices=['json', 'protobuf'],
         help='Value type for the topic'
     )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be changed without modifying files'
+    )
     args = parser.parse_args()
 
     print(f"🎯 Processing S3 external source for: {args.topic} ({args.value_type})")
@@ -156,6 +161,23 @@ sources:
 """
 
     # Write the updated sources file
+    if args.dry_run:
+        print("\n🔍 DRY RUN MODE - No files will be modified")
+        print(f"\n📝 Would update sources file: {sources_file}")
+        print(f"   Would add table: {topic_table}")
+        
+        # Show what would be added
+        print(f"\n📝 Would generate model files:")
+        base_model = f"stg_kafka__{topic_table}__external"
+        typecast_model = f"stg_kafka__{topic_table}"
+        print(f"   - {base_model}.sql (in models/staging/kafka/external/)")
+        print(f"   - {typecast_model}.sql (in models/staging/kafka/)")
+        
+        print(f"\n{'='*70}")
+        print(f"🔍 DRY RUN COMPLETE - No changes written")
+        print(f"{'='*70}\n")
+        return
+    
     if existing_content:
         # Insert alphabetically without moving existing entries
         import re

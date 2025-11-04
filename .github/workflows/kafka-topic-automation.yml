@@ -41,7 +41,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install requests
+          pip install requests pyyaml
           
       - name: Install GitHub CLI
         run: |
@@ -62,7 +62,7 @@ jobs:
           AIRFLOW_BRANCH: ${{ vars.DATA_AIRFLOW_DEFAULT_BRANCH }}
           DBT_BRANCH: ${{ vars.DBT_DEFAULT_BRANCH }}
         run: |
-          python3 python-parallel-executor/parallel_pr_creator.py      
+          python3 scripts/parallel_pr_creator.py      
       - name: Post Summary
         if: always()
         run: |

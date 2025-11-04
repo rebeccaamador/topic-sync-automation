@@ -1,15 +1,15 @@
 # Topic Sync Automation
 
-This project automates the process of adding new Kafka topics to your data pipeline by creating pull requests across multiple repositories. It handles the entire workflow from Kafka connector configuration to dbt model creation.
+Automation tool that streamlines adding new Kafka topics to data pipelines by creating pull requests across multiple repositories. This tool handles the entire workflow from Kafka connector configuration to dbt model creation.
 
-## 🎯 What This Project Does
+## 🎯 Overview
 
-When you need to add a new Kafka topic to your data pipeline, this automation creates PRs:
+When adding a new Kafka topic to your data pipeline, this automation creates PRs across your repositories:
 
 1. **helm-apps** - Adds the topic to Kafka Connect sink connector configuration (Snowflake or S3)
 2. **data-airflow** - Adds StreamTaskConfig for Airflow DAG (for realtime/Snowflake sinks only)
 
-After the PRs are merged, you'll receive a Slack notification with a link to manually trigger the Airflow DAG.
+After the PRs are created, you'll receive a Slack notification with links to all PRs and a link to manually trigger the Airflow DAG (for realtime sinks). Review and merge the PRs, then use the Slack link to trigger the DAG.
 
 > ⚠️ **Note:** Step 3 (dbt model creation) is temporarily disabled **for realtime sinks only** pending QA and production readiness. S3 sinks will still get dbt external source definitions created.
 
@@ -70,9 +70,9 @@ python3 scripts/parallel_pr_creator.py \
   --sink-type realtime \
   --github-token YOUR_GITHUB_TOKEN \
   --slack-webhook YOUR_SLACK_WEBHOOK \
-  --helm-repo org/helm-apps \
-  --airflow-repo org/data-airflow \
-  --dbt-repo org/dbt
+  --helm-repo your-org/helm-apps \
+  --airflow-repo your-org/data-airflow \
+  --dbt-repo your-org/dbt
 ```
 
 ### Or Use Environment Variables
@@ -83,9 +83,9 @@ export VALUE_TYPE="json"
 export SINK_TYPE="realtime"
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
 export SLACK_WEBHOOK="https://hooks.slack.com/services/..."
-export HELM_APPS_REPO="org/helm-apps"
-export DATA_AIRFLOW_REPO="org/data-airflow"
-export DBT_REPO="org/dbt"
+export HELM_APPS_REPO="your-org/helm-apps"
+export DATA_AIRFLOW_REPO="your-org/data-airflow"
+export DBT_REPO="your-org/dbt"
 
 python3 scripts/parallel_pr_creator.py
 ```
@@ -94,9 +94,9 @@ python3 scripts/parallel_pr_creator.py
 
 The `local-testing/` directory contains dry-run scripts that let you **preview changes** before running the full automation. These scripts are perfect for:
 
-- Testing changes locally
+- Testing changes locally before creating PRs
 - Validating topic configurations
-- Understanding what will be modified
+- Understanding what will be modified in each repository
 - Learning how the automation works
 
 ### Step 1: Test helm-apps Changes
@@ -125,6 +125,20 @@ cd local-testing
 - Finds DAG file with StreamTaskConfig
 - Previews StreamTaskConfig addition
 - Shows diff of changes
+- **Does not modify any files**
+
+### Step 3: Test dbt Changes
+
+```bash
+cd local-testing
+./dry-run-step3.sh audit.action.v1 realtime
+```
+
+**What it does:**
+- Clones dbt repository
+- Finds sources.yml file (for realtime) or external sources (for S3)
+- Previews model creation
+- Shows what would be generated
 - **Does not modify any files**
 
 ### Test Slack Notification
@@ -168,9 +182,9 @@ cd local-testing
 | `TOPIC` | Kafka topic name | `audit.action.v1` |
 | `GITHUB_TOKEN` | GitHub personal access token | `ghp_xxxxxxxxxxxx` |
 | `SLACK_WEBHOOK` | Slack webhook URL for notifications | `https://hooks.slack.com/...` |
-| `HELM_APPS_REPO` | helm-apps repository (org/repo) | `org/helm-apps` |
-| `DATA_AIRFLOW_REPO` | data-airflow repository (org/repo) | `org/data-airflow` |
-| `DBT_REPO` | dbt repository (org/repo) | `org/dbt` |
+| `HELM_APPS_REPO` | helm-apps repository (org/repo) | `your-org/helm-apps` |
+| `DATA_AIRFLOW_REPO` | data-airflow repository (org/repo) | `your-org/data-airflow` |
+| `DBT_REPO` | dbt repository (org/repo) | `your-org/dbt` |
 
 ### Optional Variables
 
@@ -186,7 +200,7 @@ cd local-testing
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `AIRFLOW_URL` | Airflow base URL | `https://airflow.company.com` |
+| `AIRFLOW_URL` | Airflow base URL | `https://airflow.example.com` |
 | `AIRFLOW_DAG_ID` | DAG ID for manual trigger link | `kafka_stream_loader` |
 
 **Note:** If these are configured, the Slack notification will include a clickable link to manually trigger the DAG (realtime sinks only).
@@ -224,7 +238,7 @@ source .env
 python3 scripts/parallel_pr_creator.py
 ```
 
-The `.env` file is gitignored for security (since it contains tokens).
+The `.env` file is gitignored for security (contains credentials and tokens).
 
 ## 📝 Individual Scripts
 
@@ -248,6 +262,23 @@ python3 scripts/step2_data_airflow.py \
   --topic audit.action.v1 \
   --dag-file /path/to/dag.py \
   --dry-run  # Remove for actual changes
+```
+
+### Step 3: dbt
+
+```bash
+# For realtime sinks
+python3 scripts/step3_dbt_realtime_sink.py \
+  --topic audit.action.v1 \
+  --sources-file /path/to/sources.yml \
+  --models-dir /path/to/models \
+  --dry-run
+
+# For S3 sinks
+python3 scripts/step3_dbt_s3_sink.py \
+  --topic audit.action.v1 \
+  --value-type json \
+  --dry-run
 ```
 
 > ⚠️ **Note:** Step 3 (dbt model creation for realtime sinks) is temporarily disabled in the parallel PR creator pending QA. S3 sink dbt creation remains active.
@@ -278,16 +309,17 @@ python3 scripts/step2_data_airflow.py \
 ### Manual DAG Trigger (After PR Merge)
 
 **For realtime sinks:**
-- After PRs are merged, you'll receive a Slack notification
-- The notification includes a clickable link to manually trigger the Airflow DAG
+- When PRs are created, you'll receive a Slack notification with PR links and a manual DAG trigger link
+- Review and merge the PRs first
+- After PRs are merged, click the DAG trigger link in the Slack notification to manually trigger the Airflow DAG
 - Simply click the link in Slack and confirm the trigger in Airflow UI
 - The table name is provided in the Slack message for reference
 
 **Why manual trigger?** This approach:
-- ✅ No Airflow credentials needed in automation
-- ✅ You control when to trigger (after PR review/merge)
+- ✅ No Airflow credentials needed in automation (security best practice)
+- ✅ Team controls when to trigger (after PR review/merge)
 - ✅ Safer - won't trigger before PRs are merged
-- ✅ More visibility - you see exactly what DAG to trigger
+- ✅ More visibility - team sees exactly what DAG to trigger
 
 ### Step 3: dbt (PARTIALLY DISABLED)
 
@@ -343,10 +375,10 @@ The `parallel_pr_creator.py` script:
 
 After running the automation:
 
-1. **Check Slack** - You'll receive a notification with PR links
+1. **Check Slack** - You'll receive a notification immediately with PR links and DAG trigger link
 2. **Review PRs** - Each PR shows exactly what changed
 3. **Approve & Merge** - Merge in order: helm-apps → data-airflow
-4. **Trigger Airflow DAG** - Click the link in Slack notification to manually trigger (realtime only)
+4. **Trigger Airflow DAG** - After PRs are merged, click the DAG trigger link in the Slack notification to manually trigger (realtime only)
 5. **Verify** - Check that topic data flows through the pipeline
 
 ## 📊 Example Output
@@ -369,9 +401,9 @@ Creating 2 PRs in parallel...
 📊 Summary (completed in 8.5 seconds)
 ============================================================
 ✅ helm-apps     : success
-   → https://github.com/org/helm-apps/pull/123
+   → https://github.com/your-org/helm-apps/pull/123
 ✅ data-airflow  : success
-   → https://github.com/org/data-airflow/pull/456
+   → https://github.com/your-org/data-airflow/pull/456
 ⏭️  dbt          : skipped
    → Step 3 (dbt model creation) temporarily disabled for realtime sinks pending QA and production readiness
 
@@ -403,12 +435,12 @@ Table: audit__action__v1__raw
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-## 🤝 Contributing
+## 🔧 Extending the Tool
 
 To add support for new topic patterns or sink types:
 
 1. Update the appropriate step script (`step1_*.py`, `step2_*.py`)
-2. Test with dry-run scripts
+2. Test with dry-run scripts in `local-testing/`
 3. Update this README with examples
 
 ## 📝 Notes
@@ -417,6 +449,20 @@ To add support for new topic patterns or sink types:
 - **Step 3 (dbt for S3 sinks)** remains active and creates external source definitions ✅
 - The scripts still exist (`step3_dbt_realtime_sink.py`, `step3_dbt_s3_sink.py`) and can be run manually if needed
 - Once ready for production, Step 3 for realtime can be re-enabled in `parallel_pr_creator.py`
-- **Airflow DAG triggering** is now manual via Slack link - no credentials needed in automation!
+- **Airflow DAG triggering** is manual via Slack link - no credentials stored in automation for security compliance
+- **Repository access**: Ensure you have write permissions to helm-apps, data-airflow, and dbt repositories
 
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test with the dry-run scripts
+5. Submit a pull request
+
+## 📄 License
+
+[Add your license here]
 
