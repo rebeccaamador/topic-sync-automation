@@ -1,0 +1,77 @@
+# GitHub Actions workflow to run parallel PR creator
+
+name: Create Parallel PRs
+
+on:
+  workflow_dispatch: # This will eventually be replaced with 
+    inputs:
+      topic:
+        description: 'Kafka topic name (e.g., customer.action.v1)'
+        required: true
+        type: string
+      value_type:
+        description: 'Value type'
+        required: false
+        type: choice
+        default: 'json'
+        options:
+          - json
+          - protobuf
+      sink_type:
+        description: 'Sink type'
+        required: false
+        type: choice
+        default: 'realtime'
+        options:
+          - realtime
+          - s3
+
+jobs:
+  create-parallel-prs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests
+          
+      - name: Install GitHub CLI
+        run: |
+          # GitHub CLI is pre-installed on ubuntu-latest
+          gh --version
+      
+      - name: Run Parallel PR Creator
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          HELM_APPS_REPO: ${{ vars.HELM_APPS_REPO }}
+          DATA_AIRFLOW_REPO: ${{ vars.DATA_AIRFLOW_REPO }}
+          DBT_REPO: ${{ vars.DBT_REPO }}
+          TOPIC: ${{ github.event.inputs.topic }}
+          VALUE_TYPE: ${{ github.event.inputs.value_type }}
+          SINK_TYPE: ${{ github.event.inputs.sink_type }}
+          HELM_BRANCH: ${{ vars.HELM_APPS_DEFAULT_BRANCH }}
+          AIRFLOW_BRANCH: ${{ vars.DATA_AIRFLOW_DEFAULT_BRANCH }}
+          DBT_BRANCH: ${{ vars.DBT_DEFAULT_BRANCH }}
+        run: |
+          python3 python-parallel-executor/parallel_pr_creator.py      
+      - name: Post Summary
+        if: always()
+        run: |
+          echo "## Parallel PR Creation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Topic:** \`${{ github.event.inputs.topic }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check Slack for PR links!" >> $GITHUB_STEP_SUMMARY
+
+
+
+
