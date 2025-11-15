@@ -13,7 +13,7 @@ from difflib import unified_diff
 
 def generate_table_name(topic):
     """Convert topic name to Snowflake table name."""
-    # audit.action.v1 -> audit__action__v1__raw
+    # customer.action.v1 -> customer__action__v1__raw
     table_name = topic.replace('.', '__').replace('-', '_') + '__raw'
     return table_name
 
@@ -135,7 +135,7 @@ def main():
     parser.add_argument(
         '--topic',
         required=True,
-        help='Kafka topic name (e.g., audit.action.v1)'
+        help='Kafka topic name (e.g., customer.action.v1)'
     )
     parser.add_argument(
         '--dag-file',

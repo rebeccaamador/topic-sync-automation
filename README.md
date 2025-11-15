@@ -8,17 +8,16 @@ When adding a new Kafka topic to your data pipeline, this automation creates PRs
 
 1. **helm-apps** - Adds the topic to Kafka Connect sink connector configuration (Snowflake or S3)
 2. **data-airflow** - Adds StreamTaskConfig for Airflow DAG (for realtime/Snowflake sinks only)
+3. **dbt** - Creates extraction models for realtime sinks or external source definitions for S3 sinks
 
 After the PRs are created, you'll receive a Slack notification with links to all PRs and a link to manually trigger the Airflow DAG (for realtime sinks). Review and merge the PRs, then use the Slack link to trigger the DAG.
-
-> ⚠️ **Note:** Step 3 (dbt model creation) is temporarily disabled **for realtime sinks only** pending QA and production readiness. S3 sinks will still get dbt external source definitions created.
 
 ### Workflow Overview
 
 #### For Realtime (Snowflake) Sinks:
 ```
-Step 1: helm-apps PR → Step 2: data-airflow PR → Merge PRs → Manually trigger DAG
-Kafka → Snowflake (via connector) → Airflow processing (manual trigger)
+Step 1: helm-apps PR → Step 2: data-airflow PR → Step 3: dbt PR → Merge PRs → Manually trigger DAG
+Kafka → Snowflake (via connector) → Airflow processing (manual trigger) → dbt extraction models
 ```
 
 #### For S3 Sinks:
@@ -32,7 +31,7 @@ The automation:
 - ✅ Creates feature branches
 - ✅ Runs modification scripts
 - ✅ Commits and pushes changes
-- ✅ Creates pull requests (Steps 1-2 run **in parallel**)
+- ✅ Creates pull requests (Steps 1-3 run **in parallel**)
 - ✅ Sends Slack notification with PR links **and manual DAG trigger link**
 
 ## 📁 Project Structure
@@ -43,8 +42,8 @@ topic-sync-automation/
 │   ├── parallel_pr_creator.py        # Main orchestration script
 │   ├── step1_helm_apps.py            # Modifies helm-apps values.yaml
 │   ├── step2_data_airflow.py         # Adds StreamTaskConfig to DAG
-│   ├── step3_dbt_realtime_sink.py    # [DISABLED] Creates dbt extraction models
-│   └── step3_dbt_s3_sink.py          # [ACTIVE] Bootstraps S3 external sources
+│   ├── step3_dbt_realtime_sink.py    # Creates dbt extraction models for realtime sinks
+│   └── step3_dbt_s3_sink.py          # Bootstraps S3 external sources
 └── local-testing/
     ├── dry-run-step1.sh              # Test Step 1 locally
     ├── dry-run-step2.sh              # Test Step 2 locally
@@ -281,8 +280,6 @@ python3 scripts/step3_dbt_s3_sink.py \
   --dry-run
 ```
 
-> ⚠️ **Note:** Step 3 (dbt model creation for realtime sinks) is temporarily disabled in the parallel PR creator pending QA. S3 sink dbt creation remains active.
-
 ## 🎓 How It Works
 
 ### Step 1: helm-apps
@@ -321,24 +318,28 @@ python3 scripts/step3_dbt_s3_sink.py \
 - ✅ Safer - won't trigger before PRs are merged
 - ✅ More visibility - team sees exactly what DAG to trigger
 
-### Step 3: dbt (PARTIALLY DISABLED)
+### Step 3: dbt
 
-> ⚠️ **Step 3 for realtime sinks is currently disabled** pending QA and production readiness. The scripts exist and can be run manually if needed:
-> - `step3_dbt_realtime_sink.py` - Creates dbt extraction models for realtime sinks (**DISABLED** for now)
-> - `step3_dbt_s3_sink.py` - Bootstraps S3 external sources for S3 sinks (**ACTIVE** ✅)
+**For Realtime Sinks:**
+- `step3_dbt_realtime_sink.py` - Creates dbt extraction models for realtime sinks
+- Adds source definition to `_kafka_connect__sources.yml`
+- Creates staging model with schema auto-discovery support
+
+**For S3 Sinks:**
+- `step3_dbt_s3_sink.py` - Bootstraps S3 external sources for S3 sinks
+- Adds external source definition
+- Creates base and typecast models
 
 ### Execution Flow
 
 The `parallel_pr_creator.py` script:
-1. **Creates PRs in parallel** (Steps 1-2/3) using Python's `ThreadPoolExecutor`
-   - helm-apps, data-airflow, and dbt (for S3) PRs are created simultaneously
-   - Reduces total PR creation time by ~2x
+1. **Creates PRs in parallel** (Steps 1-3) using Python's `ThreadPoolExecutor`
+   - helm-apps, data-airflow, and dbt PRs are created simultaneously
+   - Reduces total PR creation time significantly
 2. **Sends Slack notification** with:
    - All PR links for review
    - Manual DAG trigger link (for realtime sinks)
    - Table name to process
-
-> **Note:** Step 3 (dbt) is temporarily disabled for realtime sinks only and will show as "skipped". S3 sinks will still create dbt PRs.
 
 ## 🔍 Troubleshooting
 
@@ -390,12 +391,13 @@ After running the automation:
 ============================================================
 
 ✅ Creating Airflow DAG PR (realtime → Snowflake)
-⏭️  Step 3 (dbt model creation) temporarily disabled for realtime sinks
+✅ Creating dbt extraction model PR (realtime → Snowflake)
 
-Creating 2 PRs in parallel...
+Creating 3 PRs in parallel...
 
 🚀 [Add Kafka Topic...] Starting PR creation...
 🚀 [Add Stream Task Config...] Starting PR creation...
+🚀 [Create Materialized Model...] Starting PR creation...
 
 ============================================================
 📊 Summary (completed in 8.5 seconds)
@@ -404,10 +406,10 @@ Creating 2 PRs in parallel...
    → https://github.com/your-org/helm-apps/pull/123
 ✅ data-airflow  : success
    → https://github.com/your-org/data-airflow/pull/456
-⏭️  dbt          : skipped
-   → Step 3 (dbt model creation) temporarily disabled for realtime sinks pending QA and production readiness
+✅ dbt           : success
+   → https://github.com/your-org/dbt/pull/789
 
-✅ Successfully created 2/2 PRs
+✅ Successfully created 3/3 PRs
 ============================================================
 
 📨 Sending Slack notification...
@@ -424,6 +426,7 @@ Table: audit__action__v1__raw
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ helm-apps PR #123
 ✅ data-airflow PR #456
+✅ dbt PR #789
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 Next Steps:
@@ -445,10 +448,9 @@ To add support for new topic patterns or sink types:
 
 ## 📝 Notes
 
-- **Step 3 (dbt for realtime sinks)** is temporarily disabled pending QA and production readiness
-- **Step 3 (dbt for S3 sinks)** remains active and creates external source definitions ✅
-- The scripts still exist (`step3_dbt_realtime_sink.py`, `step3_dbt_s3_sink.py`) and can be run manually if needed
-- Once ready for production, Step 3 for realtime can be re-enabled in `parallel_pr_creator.py`
+- **Step 3 (dbt)** is active for both realtime and S3 sinks
+  - Realtime sinks: Creates dbt extraction models
+  - S3 sinks: Creates external source definitions
 - **Airflow DAG triggering** is manual via Slack link - no credentials stored in automation for security compliance
 - **Repository access**: Ensure you have write permissions to helm-apps, data-airflow, and dbt repositories
 

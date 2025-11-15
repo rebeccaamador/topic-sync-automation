@@ -791,11 +791,11 @@ After merge, the S3 data will be available as an external source in Snowflake.
         
         # Different workflow for realtime vs S3
         if self.sink_type == 'realtime':
-            # Realtime: Data goes to Snowflake → Need Airflow processing
-            # NOTE: Step 3 (dbt) is temporarily disabled pending QA
+            # Realtime: Data goes to Snowflake → Need Airflow processing and dbt models
             futures_to_create.append((self.create_data_airflow_pr, 'data-airflow'))
+            futures_to_create.append((self.create_dbt_pr, 'dbt'))
             print("✅ Creating Airflow DAG PR (realtime → Snowflake)")
-            print("⏭️  Step 3 (dbt model creation) temporarily disabled for realtime sinks")
+            print("✅ Creating dbt extraction model PR (realtime → Snowflake)")
         else:
             # S3: Data goes to S3 → Need external source bootstrap in dbt
             futures_to_create.append((self.create_dbt_bootstrap_pr, 'dbt'))
@@ -834,14 +834,6 @@ After merge, the S3 data will be available as an external source in Snowflake.
                 'pr_url': None
             }
         
-        # Step 3 (dbt) is temporarily disabled for realtime sinks only
-        if self.sink_type == 'realtime':
-            results['dbt'] = {
-                'status': 'skipped',
-                'error': 'Step 3 (dbt model creation) temporarily disabled for realtime sinks pending QA and production readiness',
-                'pr_url': None
-            }
-        
         elapsed = time.time() - start_time
         
         # Print summary
@@ -870,7 +862,7 @@ After merge, the S3 data will be available as an external source in Snowflake.
         if self.sink_type != 'realtime':
             print(f"⏭️  Skipped Airflow DAG (not needed for {self.sink_type} → S3)")
             # Only show dbt bootstrap success if it actually succeeded
-            dbt_bootstrap_status = results.get('dbt-bootstrap', {}).get('status')
+            dbt_bootstrap_status = results.get('dbt', {}).get('status')
             if dbt_bootstrap_status == 'success':
                 print(f"✅ Created dbt bootstrap PR (S3 external sources)")
             elif dbt_bootstrap_status == 'no_changes':
@@ -890,7 +882,7 @@ def main():
     )
     
     # All arguments are now optional if provided via env vars
-    parser.add_argument('--topic', help='Kafka topic name (e.g., audit.action.v1) [env: TOPIC]')
+    parser.add_argument('--topic', help='Kafka topic name (e.g., customer.action.v1) [env: TOPIC]')
     parser.add_argument('--github-token', help='GitHub Personal Access Token [env: GITHUB_TOKEN]')
     parser.add_argument('--slack-webhook', help='Slack webhook URL [env: SLACK_WEBHOOK]')
     

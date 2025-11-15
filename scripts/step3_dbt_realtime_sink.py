@@ -265,7 +265,7 @@ def infer_unique_key_from_topic(topic):
     patterns = [
         ('device', 'device_id__sk', True),
         ('feedback', 'feedback_id__sk', True),
-        ('audit', 'audit_id__sk', True),
+        ('customer', 'customer_id__sk', True),
         ('compliance', 'compliance_id__sk', True),
         ('vulnerability', 'vulnerability_id__sk', True),
         ('threat', 'threat_id__sk', True),
@@ -702,7 +702,7 @@ def main():
     parser.add_argument(
         '--topic',
         required=True,
-        help='Kafka topic name (e.g., audit.action.v1)'
+        help='Kafka topic name (e.g., customer.action.v1)'
     )
     parser.add_argument(
         '--sources-file',

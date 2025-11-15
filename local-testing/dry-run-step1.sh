@@ -45,7 +45,7 @@ echo -e "\n${GREEN}Repository:${NC} $HELM_APPS_REPO"
 # Get topic name
 if [ -z "$1" ]; then
     echo -e "\n${YELLOW}Enter Kafka topic name:${NC}"
-    echo -e "Example: ${GREEN}audit.action.v1${NC}"
+    echo -e "Example: ${GREEN}customer.action.v1${NC}"
     read -p "Topic: " TOPIC
 else
     TOPIC="$1"

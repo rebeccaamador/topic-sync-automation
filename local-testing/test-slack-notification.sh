@@ -31,7 +31,7 @@ echo -e "${GREEN}✅ Slack webhook configured${NC}"
 echo ""
 
 # Get test parameters (or use defaults)
-TOPIC="${1:-audit.action.v1}"
+TOPIC="${1:-customer.action.v1}"
 TABLE_NAME=$(echo "$TOPIC" | sed 's/\./__/g' | sed 's/-/_/g')__raw
 SINK_TYPE="${2:-realtime}"
 AIRFLOW_URL="${AIRFLOW_URL:-https://airflow.company.com}"
@@ -93,13 +93,13 @@ BLOCKS='[
 
 # Add Step 3 (dbt) status - different for realtime vs S3
 if [ "$SINK_TYPE" = "realtime" ]; then
-    # Realtime: dbt is temporarily disabled
+    # Realtime: dbt is active and creates extraction models
     BLOCKS="$BLOCKS"',
     {
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": "*Create Materialized Model for Kafka Topic in dbt*\n⏭️ Step 3 (dbt model creation) temporarily disabled for realtime sinks pending QA and production readiness"
+            "text": "*Create Materialized Model for Kafka Topic in dbt*\n<https://github.com/org/dbt/pull/789|View PR #789> ✅"
         }
     },
     {"type": "divider"}'
@@ -110,7 +110,7 @@ else
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": "*Add S3 External Source Bootstrap in dbt*\n<'"$DBT_PR_URL"'|View PR #789> ✅"
+            "text": "*Add S3 External Source Bootstrap in dbt*\n<https://github.com/org/dbt/pull/789|View PR #789> ✅"
         }
     },
     {"type": "divider"}'
@@ -177,7 +177,7 @@ echo -e "  ✅ helm-apps PR #123"
 
 if [ "$SINK_TYPE" = "realtime" ]; then
     echo -e "  ✅ data-airflow PR #456"
-    echo -e "  ⏭️  dbt (temporarily disabled for realtime sinks)"
+    echo -e "  ✅ dbt PR #789"
     echo -e "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "  📋 Next Steps:"
     echo -e "  1. Review and merge the PRs above"

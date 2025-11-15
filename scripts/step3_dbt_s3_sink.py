@@ -87,7 +87,7 @@ def main():
     parser.add_argument(
         '--topic',
         required=True,
-        help='Kafka topic name (e.g., audit.action.v1)'
+        help='Kafka topic name (e.g., customer.action.v1)'
     )
     parser.add_argument(
         '--value-type',
